@@ -23,8 +23,7 @@
         "./service-worker": "./src/service-worker.mts"
     },
     "scripts": {
-        "build": "tsc --build",
-        "clean": "tsc --build --clean",
+        "build": "tsc",
         "lint": "eslint src"
     },
     "devDependencies": {

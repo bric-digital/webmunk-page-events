@@ -6,7 +6,7 @@
     "moduleResolution": "nodenext",
     "sourceMap": true,
     "outDir": "dist",
-    "types": ["chrome-types", "jquery"],
+    "types": ["chrome-types"],
     "lib": ["es2015", "es2016", "dom"],
   },
   "include": [

@@ -3,14 +3,17 @@ orbs:
   node: circleci/node@7.2.1
 
 jobs:
-  build: # this can be any name you choose
+  build:
     docker:
       - image: cimg/node:24.11.0-browsers
-    executor: node/default # use the default executor defined within the orb
+    executor: node/default
     steps:
       - checkout
       - node/install-packages:
           pkg-manager: npm
       - run:
-          command: npm run lint
+          name: Build code
+          command: npm run build
+      - run:
           name: Lint code
+          command: npm run lint
