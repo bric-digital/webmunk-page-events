@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "module": "NodeNext",
+    "target": "es5",
+    "esModuleInterop": true,
+    "moduleResolution": "nodenext",
+    "sourceMap": true,
+    "outDir": "dist",
+    "types": ["chrome-types", "jquery"],
+    "lib": ["es2015", "es2016", "dom"],
+  },
+  "include": [
+    "src/**/*"
+  ],
+}

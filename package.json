@@ -6,18 +6,17 @@
         "extension",
         "webmunk"
     ],
-    "homepage": "https://github.com/bric-digital/AI-Extension#readme",
-    "bugs": {
-        "url": "https://github.com/bric-digital/AI-Extension/issues"
-    },
-    "repository": {
-        "type": "git",
-        "url": "git+https://github.com/bric-digital/AI-Extension.git"
-    },
-    "license": "UNLICENSED",
     "author": "Behavioral Research Innovation Center",
     "type": "module",
     "main": "index.mts",
+    "homepage": "https://github.com/bric-digital/webmunk-page-events",
+    "bugs": {
+        "url": "https://github.com/bric-digital/webmunk-page-events/issues"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/bric-digital/webmunk-page-events.git"
+    },
     "exports": {
         "./extension": "./src/extension.mts",
         "./browser": "./src/browser.mts",
@@ -25,12 +24,19 @@
     },
     "scripts": {
         "build": "tsc --build",
-        "clean": "tsc --build --clean"
-    },
-    "dependenciesOff": {
-        "@bric/webmunk-core": "../../local_modules/webmunk-core/package.json"
+        "clean": "tsc --build --clean",
+        "lint": "eslint src"
     },
     "devDependencies": {
-        "typescript": "^5.9.2"
+        "@eslint/js": "^9.39.1",
+        "chrome-types": "^0.1.387",
+        "eslint": "^9.39.1",
+        "globals": "^16.5.0",
+        "jiti": "^2.6.1",
+        "typescript": "^5.9.2",
+        "typescript-eslint": "^8.46.3"
+    },
+    "dependencies": {
+        "@bric/webmunk-core": "github:bric-digital/webmunk-core"
     }
 }
