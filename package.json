@@ -1,0 +1,36 @@
+{
+    "name": "@bric/webmunk-page-events",
+    "version": "0.0.1",
+    "description": "Webmunk module that records page lifecycle events such as opens and closes.",
+    "keywords": [
+        "extension",
+        "webmunk"
+    ],
+    "homepage": "https://github.com/bric-digital/AI-Extension#readme",
+    "bugs": {
+        "url": "https://github.com/bric-digital/AI-Extension/issues"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/bric-digital/AI-Extension.git"
+    },
+    "license": "UNLICENSED",
+    "author": "Behavioral Research Innovation Center",
+    "type": "module",
+    "main": "index.mts",
+    "exports": {
+        "./extension": "./src/extension.mts",
+        "./browser": "./src/browser.mts",
+        "./service-worker": "./src/service-worker.mts"
+    },
+    "scripts": {
+        "build": "tsc --build",
+        "clean": "tsc --build --clean"
+    },
+    "dependenciesOff": {
+        "@bric/webmunk-core": "../../local_modules/webmunk-core/package.json"
+    },
+    "devDependencies": {
+        "typescript": "^5.9.2"
+    }
+}
