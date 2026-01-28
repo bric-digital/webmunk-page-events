@@ -5,6 +5,10 @@ class PageEventsModule extends WebmunkClientModule {
     super()
   }
 
+  toString():string {
+    return 'PageEventsModule (overrride in subclasses)'
+  }
+
   setup() {
     console.log(`Setting up PageEventsModule...`)
 
