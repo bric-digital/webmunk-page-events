@@ -1,16 +1,16 @@
-import { WebmunkClientModule, registerWebmunkModule } from '@bric/webmunk-core/browser'
+import { REXClientModule, registerREXModule } from '@bric/rex-core/browser'
 
-class PageEventsModule extends WebmunkClientModule {
+class PageEventsModule extends REXClientModule {
   constructor() {
     super()
   }
 
   toString():string {
-    return 'PageEventsModule (overrride in subclasses)'
+    return 'PageEventsModule'
   }
 
   setup() {
-    console.log(`Setting up PageEventsModule...`)
+    // console.log(`Setting up PageEventsModule...`)
 
     document.addEventListener('freeze', (event) => { // eslint-disable-line @typescript-eslint/no-unused-vars
       console.log(`freeze`)
@@ -52,6 +52,6 @@ class PageEventsModule extends WebmunkClientModule {
 
 const plugin = new PageEventsModule()
 
-registerWebmunkModule(plugin)
+registerREXModule(plugin)
 
 export default plugin
