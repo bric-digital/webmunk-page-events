@@ -46,6 +46,11 @@ Every event shares the name `rex-page-event` and is distinguished by `event_type
 | `url_shown_at` | Present on **every** event: the `Date.now()` when the event's `url` became active in this tab. Reset on every `tab_url_change` (to `now`) and minted fresh at `tab_open`. This is the **deterministic join key** against `rex-history-visit.visit_time`. |
 | `url_focus_duration_ms` | On `tab_url_change` and `tab_close`: ms the user had *this specific URL* focused in this tab. Per-URL, not per-tab — reset on every `tab_url_change`. |
 | `url_dwell_ms` | On `tab_url_change` and `tab_close`: wall-clock ms the URL was the active URL in this tab (regardless of focus). Useful for differentiating "tab in background for an hour" from "user actively reading." |
+| `previous_url` | Only on `tab_url_change`: the URL that preceded the outgoing `url` in this same tab (i.e. two hops of in-tab history). Absent on the first `tab_url_change` of a tab. Subject to the same redaction rules as `url`. |
+| `previous_url_filtered` | Only on `tab_url_change` when `previous_url` is present: `true` iff `previous_url` was redacted by the list rules. Independent of the top-level `filtered` (which describes `url`). |
+| `opener_tab_id` | Only on `tab_open` when Chrome reports an opener tab (middle-click, `target="_blank"`, `window.open`, Ctrl/Cmd-click, "Open link in new tab"): the tab id that spawned this tab. Absent for tabs opened from the address bar, bookmarks, new-tab button, session restore, or an external application. |
+| `opener_url` | Only on `tab_open` when `opener_tab_id` is present **and** this module has state for the opener tab: the opener tab's current URL at the moment the new tab was created. Subject to the same redaction rules as `url`. |
+| `opener_filtered` | Only on `tab_open` when `opener_url` is present: `true` iff `opener_url` was redacted by the list rules. Independent of the top-level `filtered` (which describes `url`). |
 | `tab_lifetime_ms` | Only on `tab_close`: wall-clock ms between `tab_open` and the close event |
 | `focus_duration_ms` | Only on `tab_close`: accumulated ms the tab was focused **across its entire lifetime** (all URL segments combined). Sum of every segment's `url_focus_duration_ms`. |
 | `is_window_closing` | Only on `tab_close`: the `isWindowClosing` flag from `chrome.tabs.onRemoved`'s `removeInfo` — `true` when the tab closed because its window did |
@@ -53,20 +58,23 @@ Every event shares the name `rex-page-event` and is distinguished by `event_type
 
 ### Example records
 
-**`tab_open`** — a new tab appears. `url_shown_at` equals `timestamp` because the URL just became active:
+**`tab_open`** — a new tab appears. `url_shown_at` equals `timestamp` because the URL just became active. When Chrome reports an opener tab (e.g. middle-click on a link), `opener_tab_id` / `opener_url` / `opener_filtered` are included — see **Cross-tab referral linkage** below:
 
 ```json
 {
   "name": "rex-page-event",
   "event_type": "tab_open",
   "session_id": "b4e9f1a2-3c5d-4e7a-9b1c-8d2e0f3a4b5c",
-  "tab_id": 8472,
+  "tab_id": 8473,
   "window_id": 12,
   "url": "https://www.cnbc.com/2026/04/18/fed-rate-decision-markets.html",
-  "title": "Fed holds rates steady as markets wobble",
-  "url_shown_at": 1745172463812,
-  "timestamp": 1745172463812,
-  "date": 1745172463812,
+  "title": "",
+  "url_shown_at": 1745172500000,
+  "opener_tab_id": 8472,
+  "opener_url": "https://news.ycombinator.com/",
+  "opener_filtered": false,
+  "timestamp": 1745172500000,
+  "date": 1745172500000,
   "filtered": false
 }
 ```
@@ -89,7 +97,7 @@ Every event shares the name `rex-page-event` and is distinguished by `event_type
 }
 ```
 
-**`tab_url_change`** — a **segment-flush event**: the payload describes the *outgoing* URL (so it can be linked back to the corresponding `rex-history-visit`). After this event, a new URL segment begins and a new internal `rex-page-url-active` record is delivered for the incoming URL.
+**`tab_url_change`** — a **segment-flush event**: the payload describes the *outgoing* URL (so it can be linked back to the corresponding `rex-history-visit`). After this event, a new URL segment begins and a new internal `rex-page-url-active` record is delivered for the incoming URL. `previous_url` is the URL that preceded the outgoing one in this same tab; it is absent on a tab's first `tab_url_change`.
 
 ```json
 {
@@ -103,6 +111,8 @@ Every event shares the name `rex-page-event` and is distinguished by `event_type
   "url_shown_at": 1745172463812,
   "url_focus_duration_ms": 62300,
   "url_dwell_ms": 87414,
+  "previous_url": "https://www.cnbc.com/markets",
+  "previous_url_filtered": false,
   "timestamp": 1745172551226,
   "date": 1745172551226,
   "filtered": false
@@ -204,6 +214,18 @@ Evaluation order for outbound events:
 **Important**: the internal `rex-page-url-active` record delivered to in-process subscribers (see **Linking to rex-history** below) is **never** redacted — it carries the raw URL by design. In default operation that record never leaves the extension. In `debug: true` mode it is additionally dispatched to the event bus, which means it reaches PDK and rex-local-download with the raw URL — do not enable debug in production deployments.
 
 URL fragments are matched **exactly**: `https://a/#x` and `https://a/#y` are treated as different URLs both for event emission and for `rex-page-url-active` delivery.
+
+## Cross-tab referral linkage
+
+When a user opens a link in a new tab (middle-click, `target="_blank"`, `window.open`, Ctrl/Cmd-click, "Open link in new tab" context menu), the `tab_open` event carries `opener_tab_id` and — when this module has state for the opener — `opener_url` and `opener_filtered`. `opener_url` is the opener tab's URL **at the moment the new tab was created**. It is recorded once and not revised if the opener subsequently navigates away; that is deliberate, because the referral relationship is defined at the instant of the click.
+
+Known limitations:
+
+- **Cross-profile / incognito openers**: Chrome does not populate `openerTabId` across profile boundaries or from incognito to normal windows (and vice versa). Links opened across that boundary will appear unattributed (no `opener_tab_id`, no `opener_url`). This is a Chrome API constraint and cannot be worked around from within the extension.
+- **`rel="noopener"` links**: Chrome's `openerTabId` is still populated even when `rel="noopener"` strips the JavaScript `window.opener` reference. The browser's tab-parent tracking and the page-script opener reference are independent mechanisms, so this module captures `rel="noopener"` links correctly.
+- **Opener navigating away**: `opener_url` is captured once at `tab_open` and reflects the opener tab's URL at that instant. If the opener tab navigates away immediately afterward, the recorded `opener_url` is not updated — it remains the URL that actually sent the user to the new tab, which is the analytically correct value.
+
+Cases where `opener_tab_id` will be **absent**: tabs opened from the address bar, bookmarks, the new-tab button, session restore, an external application, or any flow where Chrome itself does not set `openerTabId`.
 
 ## Linking to rex-history
 
@@ -321,8 +343,8 @@ npm test
 `pretest` bundles the module against a test shim with stubbed `chrome.*` APIs; `npm test` then runs the Playwright spec suite under `tests/specs/`:
 
 - `page-lifecycle.spec.ts` — verifies pageshow / pagehide / focus / blur forwarding.
-- `tab-lifecycle.spec.ts` — verifies tab_open / tab_url_change / tab_focus / tab_blur / tab_close / window_close; that `focus_duration_ms` accumulates correctly across a tab's lifetime; and that `tab_url_change` flushes a segment with accurate `url_focus_duration_ms` and `url_dwell_ms`.
-- `redaction.spec.ts` — verifies allow / filter / domain_only redaction paths, and that dwell time is recorded even for fully redacted URLs.
+- `tab-lifecycle.spec.ts` — verifies tab_open / tab_url_change / tab_focus / tab_blur / tab_close / window_close; that `focus_duration_ms` accumulates correctly across a tab's lifetime; that `tab_url_change` flushes a segment with accurate `url_focus_duration_ms` and `url_dwell_ms`; that `previous_url` is absent on a tab's first navigation and populated on the second; and that `tab_open` carries `opener_tab_id` / `opener_url` only when Chrome reports an opener and only when this module has state for that opener tab.
+- `redaction.spec.ts` — verifies allow / filter / domain_only redaction paths, that dwell time is recorded even for fully redacted URLs, and that `previous_url_filtered` / `opener_filtered` reflect each referenced URL's own redaction status independently of the top-level `filtered`.
 - `url-active-delivery.spec.ts` — verifies the `globalThis.__rexPageEventsUrlActive.subscribe` seam: subscriber fires on `tab_open` and `tab_url_change`, receives the raw URL even when outbound events are redacted, is not echoed onto the event bus by default, IS echoed in `debug: true` mode, exact fragment matching, unsubscribe works.
 - `config.spec.ts` — verifies `enabled: false` suppresses all events and that events arriving pre-config are ignored safely.
 

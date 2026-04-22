@@ -49,6 +49,9 @@ interface TabState {
   currentUrlShownAt: number
   currentUrlFocusMs: number
   lastTitle: string
+  // URL that preceded currentUrl in this tab, if any. Populated on tab_url_change
+  // so the next tab_url_change can emit it as `previous_url` (two hops of history).
+  priorUrl: string | null
 }
 
 interface RedactionResult {
@@ -226,10 +229,26 @@ class REXPageEventsServiceWorkerModule extends REXServiceWorkerModule {
       currentUrlShownAt: now,
       currentUrlFocusMs: 0,
       lastTitle: title,
+      priorUrl: null,
     }
     this.tabState.set(tab.id, state)
 
-    await this.emit('tab_open', state, tab.id, url, title, now)
+    // If this tab was opened from another tab (middle-click, target=_blank,
+    // window.open, etc.), Chrome sets openerTabId. Surface the opener's current
+    // URL so downstream can reconstruct cross-tab referral chains. Redacted
+    // with the same rules as `url`.
+    const extras: Record<string, unknown> = {}
+    if (tab.openerTabId !== undefined) {
+      extras.opener_tab_id = tab.openerTabId
+      const openerState = this.tabState.get(tab.openerTabId)
+      if (openerState !== undefined && openerState.currentUrl !== '') {
+        const openerRedaction = await this.redact(openerState.currentUrl, '')
+        extras.opener_url = openerRedaction.url
+        extras.opener_filtered = openerRedaction.filtered
+      }
+    }
+
+    await this.emit('tab_open', state, tab.id, url, title, now, extras)
     // After emitting tab_open, announce the URL-active record so sibling modules
     // (e.g. rex-history) can link. Raw URL on purpose — redaction happens only on
     // the outbound event bus.
@@ -258,8 +277,18 @@ class REXPageEventsServiceWorkerModule extends REXServiceWorkerModule {
     const urlFocusDurationMs = state.currentUrlFocusMs
     const urlDwellMs = now - state.currentUrlShownAt
 
+    // Redact previous_url with the same rules as url so privacy is consistent.
+    let previousUrlRedacted: string | undefined
+    let previousUrlFiltered: boolean | undefined
+    if (state.priorUrl !== null) {
+      const priorRedaction = await this.redact(state.priorUrl, '')
+      previousUrlRedacted = priorRedaction.url
+      previousUrlFiltered = priorRedaction.filtered
+    }
+
     // Emit the segment-close event. Payload describes the OUTGOING URL; url_shown_at
-    // is the outgoing segment's start.
+    // is the outgoing segment's start. `previous_url` is the URL that preceded the
+    // outgoing one in this tab (two hops of history), if any.
     await this.emit(
       'tab_url_change',
       state,
@@ -270,11 +299,14 @@ class REXPageEventsServiceWorkerModule extends REXServiceWorkerModule {
       {
         url_focus_duration_ms: urlFocusDurationMs,
         url_dwell_ms: urlDwellMs,
+        previous_url: previousUrlRedacted,
+        previous_url_filtered: previousUrlFiltered,
       },
       state.currentUrlShownAt
     )
 
     // Reset segment state for the new URL.
+    state.priorUrl = outgoingUrl
     state.currentUrl = newUrl
     state.currentUrlShownAt = now
     state.currentUrlFocusMs = 0
@@ -389,6 +421,7 @@ class REXPageEventsServiceWorkerModule extends REXServiceWorkerModule {
       currentUrlShownAt: now,
       currentUrlFocusMs: 0,
       lastTitle: '',
+      priorUrl: null,
     }
     await this.emit('window_close', synthetic, undefined, '', '', now, { window_id: windowId })
   }
@@ -612,6 +645,7 @@ class REXPageEventsServiceWorkerModule extends REXServiceWorkerModule {
       currentUrlShownAt: now,
       currentUrlFocusMs: 0,
       lastTitle: tab?.title ?? '',
+      priorUrl: null,
     }
     this.tabState.set(tabId, state)
     return state

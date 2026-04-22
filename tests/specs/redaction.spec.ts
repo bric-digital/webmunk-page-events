@@ -131,4 +131,73 @@ test.describe('Redaction — URL stays out but dwell stays in (real rex-lists In
     expect(close.focus_duration_ms).toBeGreaterThan(0)
     expect(close.tab_lifetime_ms).toBeGreaterThan(0)
   })
+
+  test('previous_url is independently redacted and previous_url_filtered reflects only that URL', async ({ page }) => {
+    await bootstrap(page, { enabled: true, filter_lists: ['sensitive'] })
+    await addListEntry(page, {
+      list_name: 'sensitive',
+      pattern: 'redacted.test',
+      pattern_type: 'domain',
+      source: 'backend',
+      metadata: { category: 'health' },
+    })
+    // a (redacted) -> b (clear) -> c : the second tab_url_change describes
+    // outgoing b (clear) with previous_url = a (must be redacted independently).
+    await page.evaluate(() => {
+      ;(window as any).__fireTabCreated({ id: 20, windowId: 1, url: 'https://redacted.test/', title: 'A', active: true })
+    })
+    await page.evaluate(() => {
+      ;(window as any).__fireTabUpdated(20, { url: 'https://public.test/b' }, { id: 20, windowId: 1, url: 'https://public.test/b', title: 'B' })
+    })
+    await page.evaluate(() => {
+      ;(window as any).__resetCapturedEvents()
+      ;(window as any).__fireTabUpdated(20, { url: 'https://public.test/c' }, { id: 20, windowId: 1, url: 'https://public.test/c', title: 'C' })
+    })
+    await page.waitForFunction(() =>
+      (window as any).__capturedEvents.some((e: any) => e.event_type === 'tab_url_change')
+    )
+    const change = (await capturedEvents(page)).find((e) => e.event_type === 'tab_url_change')
+    // Outgoing URL (b) is NOT redacted.
+    expect(change.url).toBe('https://public.test/b')
+    expect(change.filtered).toBe(false)
+    // previous_url (a) IS redacted, and its own filtered flag says so.
+    expect(change.previous_url).toBe('CATEGORY:health')
+    expect(change.previous_url_filtered).toBe(true)
+  })
+
+  test('opener_url is independently redacted and opener_filtered reflects only that URL', async ({ page }) => {
+    await bootstrap(page, { enabled: true, filter_lists: ['sensitive'] })
+    await addListEntry(page, {
+      list_name: 'sensitive',
+      pattern: 'redacted.test',
+      pattern_type: 'domain',
+      source: 'backend',
+      metadata: { category: 'health' },
+    })
+    // Opener on the filter list; new tab on a clear URL. opener_filtered must
+    // be true even though the top-level filtered is false.
+    await page.evaluate(() => {
+      ;(window as any).__fireTabCreated({ id: 30, windowId: 1, url: 'https://redacted.test/', title: 'Opener', active: true })
+    })
+    await page.evaluate(() => {
+      ;(window as any).__resetCapturedEvents()
+      ;(window as any).__fireTabCreated({
+        id: 31,
+        windowId: 1,
+        url: 'https://public.test/article',
+        title: '',
+        active: false,
+        openerTabId: 30,
+      })
+    })
+    await page.waitForFunction(() =>
+      (window as any).__capturedEvents.some((e: any) => e.event_type === 'tab_open' && e.tab_id === 31)
+    )
+    const open = (await capturedEvents(page)).find((e) => e.event_type === 'tab_open' && e.tab_id === 31)
+    expect(open.url).toBe('https://public.test/article')
+    expect(open.filtered).toBe(false)
+    expect(open.opener_tab_id).toBe(30)
+    expect(open.opener_url).toBe('CATEGORY:health')
+    expect(open.opener_filtered).toBe(true)
+  })
 })

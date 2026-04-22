@@ -133,6 +133,102 @@ test.describe('Service-worker tab/window lifecycle', () => {
     expect(events.some((e) => e.event_type === 'tab_focus' && e.tab_id === 2)).toBe(true)
   })
 
+  test('tab_url_change carries previous_url on the second navigation, not the first', async ({ page }) => {
+    await bootstrap(page)
+    await page.evaluate(() => {
+      ;(window as any).__fireTabCreated({ id: 50, windowId: 1, url: 'https://example.test/a', title: 'A', active: true })
+    })
+    // First navigation: a -> b. previous_url should be ABSENT (only one URL so far).
+    await page.evaluate(() => {
+      ;(window as any).__resetCapturedEvents()
+      ;(window as any).__fireTabUpdated(50, { url: 'https://example.test/b' }, { id: 50, windowId: 1, url: 'https://example.test/b', title: 'B' })
+    })
+    await page.waitForFunction(() =>
+      (window as any).__capturedEvents.some((e: any) => e.event_type === 'tab_url_change')
+    )
+    const firstChange = (await capturedEvents(page)).find((e) => e.event_type === 'tab_url_change')
+    expect(firstChange.url).toBe('https://example.test/a')
+    expect(firstChange.previous_url).toBeUndefined()
+    expect(firstChange.previous_url_filtered).toBeUndefined()
+
+    // Second navigation: b -> c. previous_url must now be 'a' (two hops back).
+    await page.evaluate(() => {
+      ;(window as any).__resetCapturedEvents()
+      ;(window as any).__fireTabUpdated(50, { url: 'https://example.test/c' }, { id: 50, windowId: 1, url: 'https://example.test/c', title: 'C' })
+    })
+    await page.waitForFunction(() =>
+      (window as any).__capturedEvents.some((e: any) => e.event_type === 'tab_url_change')
+    )
+    const secondChange = (await capturedEvents(page)).find((e) => e.event_type === 'tab_url_change')
+    expect(secondChange.url).toBe('https://example.test/b')
+    expect(secondChange.previous_url).toBe('https://example.test/a')
+    expect(secondChange.previous_url_filtered).toBe(false)
+  })
+
+  test('tab_open carries opener_tab_id and opener_url when openerTabId is set', async ({ page }) => {
+    await bootstrap(page)
+    // Seed the opener tab so tabState has its currentUrl.
+    await page.evaluate(() => {
+      ;(window as any).__fireTabCreated({ id: 100, windowId: 1, url: 'https://news.ycombinator.com/', title: 'HN', active: true })
+    })
+    await page.evaluate(() => {
+      ;(window as any).__resetCapturedEvents()
+      ;(window as any).__fireTabCreated({
+        id: 101,
+        windowId: 1,
+        url: 'https://example.test/article',
+        title: '',
+        active: false,
+        openerTabId: 100,
+      })
+    })
+    await page.waitForFunction(() =>
+      (window as any).__capturedEvents.some((e: any) => e.event_type === 'tab_open')
+    )
+    const open = (await capturedEvents(page)).find((e) => e.event_type === 'tab_open')
+    expect(open.tab_id).toBe(101)
+    expect(open.opener_tab_id).toBe(100)
+    expect(open.opener_url).toBe('https://news.ycombinator.com/')
+    expect(open.opener_filtered).toBe(false)
+  })
+
+  test('tab_open has no opener fields when openerTabId is absent', async ({ page }) => {
+    await bootstrap(page)
+    await page.evaluate(() => {
+      ;(window as any).__fireTabCreated({ id: 200, windowId: 1, url: 'https://example.test/direct', title: 'Direct', active: true })
+    })
+    await page.waitForFunction(() =>
+      (window as any).__capturedEvents.some((e: any) => e.event_type === 'tab_open')
+    )
+    const open = (await capturedEvents(page)).find((e) => e.event_type === 'tab_open')
+    expect(open.opener_tab_id).toBeUndefined()
+    expect(open.opener_url).toBeUndefined()
+    expect(open.opener_filtered).toBeUndefined()
+  })
+
+  test('tab_open omits opener_url when opener tab has no tracked state', async ({ page }) => {
+    await bootstrap(page)
+    // openerTabId references a tab we never saw created — opener_tab_id is still
+    // reported (Chrome said so), but opener_url must be omitted.
+    await page.evaluate(() => {
+      ;(window as any).__fireTabCreated({
+        id: 300,
+        windowId: 1,
+        url: 'https://example.test/orphan',
+        title: 'Orphan',
+        active: true,
+        openerTabId: 999,
+      })
+    })
+    await page.waitForFunction(() =>
+      (window as any).__capturedEvents.some((e: any) => e.event_type === 'tab_open')
+    )
+    const open = (await capturedEvents(page)).find((e) => e.event_type === 'tab_open')
+    expect(open.opener_tab_id).toBe(999)
+    expect(open.opener_url).toBeUndefined()
+    expect(open.opener_filtered).toBeUndefined()
+  })
+
   test('window_close fires when chrome.windows.onRemoved is invoked', async ({ page }) => {
     await bootstrap(page)
     await page.evaluate(() => (window as any).__fireWindowRemoved(1))
