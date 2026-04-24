@@ -141,4 +141,6 @@ vite.config.ts.timestamp-*
 # Test artifacts
 test-results/
 playwright-report/
+tests/extension/js/
+tests/build/
 tests/src/build/

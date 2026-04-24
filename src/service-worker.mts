@@ -1,4 +1,4 @@
-import { type REXConfiguration } from '@bric/rex-core/extension'
+import { type REXConfiguration } from '@bric/rex-core/common'
 import rexCorePlugin, {
   REXServiceWorkerModule,
   registerREXModule,
@@ -135,9 +135,7 @@ class REXPageEventsServiceWorkerModule extends REXServiceWorkerModule {
     rexCorePlugin.fetchConfiguration()
       .then((configuration: REXConfiguration | undefined) => {
         if (configuration !== undefined) {
-          const pageEventsConfig = (configuration as unknown as Record<string, unknown>)['page_events'] as
-            | PageEventsConfig
-            | undefined
+          const pageEventsConfig = configuration['page_events'] as PageEventsConfig | undefined
 
           if (pageEventsConfig !== undefined) {
             this.config = pageEventsConfig

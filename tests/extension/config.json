@@ -1,0 +1,12 @@
+{
+    "configuration_url": "config.json",
+    "identifier": "rex-page-events-test",
+    "page_events": {
+        "enabled": true
+    },
+    "ui": [{
+        "title": "REX Page Events Test Extension",
+        "identifier": "main",
+        "default": true
+    }]
+}

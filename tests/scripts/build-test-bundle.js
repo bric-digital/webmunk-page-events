@@ -8,17 +8,17 @@ import { mkdir } from 'fs/promises'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
-const testSrcDir = join(__dirname, '../src')
-const outputDir = join(__dirname, '../src/build')
+const srcDir = join(__dirname, '../src')
+const outputDir = join(__dirname, '../build')
 
 await mkdir(outputDir, { recursive: true })
 
 const modules = [
   {
-    name: 'test-shim',
-    input: join(testSrcDir, 'test-shim.mts'),
-    output: join(outputDir, 'test-shim.bundle.js'),
-  },
+    name: 'service-worker',
+    input: join(srcDir, 'service-worker.ts'),
+    output: join(outputDir, '../extension/js/serviceWorker/bundle.js')
+  }
 ]
 
 try {
@@ -35,16 +35,13 @@ try {
       mainFields: ['module', 'main'],
       conditions: ['import', 'module', 'default'],
       define: {
-        'chrome': 'globalThis.chrome',
-      },
+        'chrome': 'globalThis.chrome'
+      }
     })
 
-    console.log(`✅ ${module.name} bundle created: ${module.output}`)
+    console.log(`bundle created: ${module.output}`)
   }
-
-  console.log('\n✅ All bundles created successfully')
-  console.log('   You can now run: npm test')
 } catch (error) {
-  console.error('❌ Build failed:', error)
+  console.error('build failed:', error)
   process.exit(1)
 }
