@@ -1,56 +1,82 @@
 import { REXClientModule, registerREXModule } from '@bric/rex-core/browser'
 
-class PageEventsModule extends REXClientModule {
-  constructor() {
-    super()
-  }
+type BrowserEventType = 'page_show' | 'page_hide' | 'tab_focus' | 'tab_blur'
 
-  toString():string {
-    return 'PageEventsModule'
+interface PageEventMessage {
+  messageType: 'pageEvent'
+  event_type: BrowserEventType
+  url: string
+  title: string
+  timestamp: number
+  persisted?: boolean
+}
+
+class REXPageEventsModule extends REXClientModule {
+  toString(): string {
+    return 'REXPageEventsModule'
   }
 
   setup() {
-    // console.log(`Setting up PageEventsModule...`)
+    console.log('[rex-page-events] browser setup')
 
-    document.addEventListener('freeze', (event) => { // eslint-disable-line @typescript-eslint/no-unused-vars
-      console.log(`freeze`)
-    });
+    window.addEventListener('pageshow', (event: PageTransitionEvent) => {
+      this.send({
+        messageType: 'pageEvent',
+        event_type: 'page_show',
+        url: location.href,
+        title: document.title,
+        timestamp: Date.now(),
+        persisted: event.persisted,
+      })
+    })
 
-    document.addEventListener('resume', (event) => { // eslint-disable-line @typescript-eslint/no-unused-vars
-      console.log(`resume`)
-    });
+    window.addEventListener('pagehide', (event: PageTransitionEvent) => {
+      this.send({
+        messageType: 'pageEvent',
+        event_type: 'page_hide',
+        url: location.href,
+        title: document.title,
+        timestamp: Date.now(),
+        persisted: event.persisted,
+      })
+    })
 
-    document.addEventListener('visibilitychange', (event) => { // eslint-disable-line @typescript-eslint/no-unused-vars
-      console.log(`visibilitychange`)
-    });
+    window.addEventListener('focus', () => {
+      this.send({
+        messageType: 'pageEvent',
+        event_type: 'tab_focus',
+        url: location.href,
+        title: document.title,
+        timestamp: Date.now(),
+      })
+    })
 
-    document.addEventListener('pageshow', (event) => { // eslint-disable-line @typescript-eslint/no-unused-vars
-      console.log(`pageshow`)
-    });
+    window.addEventListener('blur', () => {
+      this.send({
+        messageType: 'pageEvent',
+        event_type: 'tab_blur',
+        url: location.href,
+        title: document.title,
+        timestamp: Date.now(),
+      })
+    })
+  }
 
-    document.addEventListener('pagehide', (event) => { // eslint-disable-line @typescript-eslint/no-unused-vars
-      console.log(`pagehide`)
-    });
-
-    document.addEventListener('DOMContentLoaded', (event) => { // eslint-disable-line @typescript-eslint/no-unused-vars
-      console.log(`DOMContentLoaded`)
-    });
-
-    document.addEventListener('readystatechange', (event) => { // eslint-disable-line @typescript-eslint/no-unused-vars
-      console.log(`readystatechange`)
-    });
-
-    document.addEventListener('mousedown', (event) => { // eslint-disable-line @typescript-eslint/no-unused-vars
-      console.log(`mousedown`)
-    });
-
-    document.addEventListener('mouseup', (event) => { // eslint-disable-line @typescript-eslint/no-unused-vars
-      console.log(`mouseup`)
-    });
+  private send(message: PageEventMessage): void {
+    try {
+      const result = chrome.runtime.sendMessage(message)
+      if (result && typeof (result as Promise<unknown>).catch === 'function') {
+        ;(result as Promise<unknown>).catch((err: unknown) => {
+          console.debug('[rex-page-events] sendMessage failed', err)
+        })
+      }
+    } catch (err) {
+      console.debug('[rex-page-events] sendMessage threw', err)
+    }
   }
 }
 
-const plugin = new PageEventsModule()
+const plugin = new REXPageEventsModule()
 
 registerREXModule(plugin)
 
